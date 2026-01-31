@@ -5,18 +5,17 @@ export enum Role {
   SYSTEM = 'system'
 }
 
+export type AppMode = 'Standard' | 'Search' | 'Engineering' | 'Math' | 'Research' | 'Thinking' | 'Shopping';
+
 export interface User {
   name: string;
   email: string;
-  picture: string;
+  picture?: string;
 }
 
-export interface MessagePart {
-  text?: string;
-  inlineData?: {
-    mimeType: string;
-    data: string;
-  };
+export interface AppConfig {
+  userName: string;
+  hasInitialized: boolean;
 }
 
 export interface ChatMessage {
@@ -25,7 +24,12 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   thinking?: string;
-  image?: {
+  memoryUpdate?: string;
+  sources?: {
+    uri: string;
+    title: string;
+  }[];
+  media?: {
     data: string;
     mimeType: string;
   };
@@ -36,4 +40,5 @@ export interface ChatSession {
   title: string;
   messages: ChatMessage[];
   lastUpdated: number;
+  isArchived?: boolean;
 }

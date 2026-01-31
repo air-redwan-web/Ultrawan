@@ -2,6 +2,7 @@
   "name": "Ultrawan Pro",
   "description": "A personal, privacy-focused AI life companion designed to be a loyal assistant, teacher, and emotional supporter. Ultrawan prioritizes logic, structured reasoning, and user context.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }
