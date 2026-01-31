@@ -29,45 +29,27 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
 
   const sessionsRef = useRef<ChatSession[]>([]);
-  useEffect(() => {
-    sessionsRef.current = sessions;
-  }, [sessions]);
-
-  // Handle responsiveness on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setIsSidebarOpen(true);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
 
   const initApp = useCallback(async () => {
     setIsInitializing(true);
     
-    // 1. Check Login Status
     const lastEmail = localStorage.getItem('ultrawan_last_login');
     if (lastEmail) {
       const registry = JSON.parse(localStorage.getItem('ultrawan_user_registry') || '{}');
-      if (registry[lastEmail]) {
-        setCurrentUser(registry[lastEmail]);
-      }
+      if (registry[lastEmail]) setCurrentUser(registry[lastEmail]);
     }
     
-    // 2. Check Memory Access
     const permitted = await storage.verifyPermission();
     if (permitted) {
       setHasMemoryAccess(true);
       const loadedSessions = await storage.loadAllSessions();
       setSessions(loadedSessions);
       if (loadedSessions.length > 0 && !activeSessionId) {
-        const firstNonArchived = loadedSessions.find(s => !s.isArchived);
-        if (firstNonArchived) setActiveSessionId(firstNonArchived.id);
+        const first = loadedSessions.find(s => !s.isArchived);
+        if (first) setActiveSessionId(first.id);
       }
     }
-    
     setIsInitializing(false);
   }, [activeSessionId]);
 
@@ -83,26 +65,8 @@ const App: React.FC = () => {
     return newId;
   }, [hasMemoryAccess]);
 
-  const handleRenameSession = async (id: string, newTitle: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle } : s));
-    const target = sessionsRef.current.find(s => s.id === id);
-    if (target && hasMemoryAccess) {
-      storage.syncSession({ ...target, title: newTitle });
-    }
-  };
-
-  const handleArchiveSession = async (id: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, isArchived: !s.isArchived } : s));
-    const target = sessionsRef.current.find(s => s.id === id);
-    if (target && hasMemoryAccess) {
-      storage.syncSession({ ...target, isArchived: !target.isArchived });
-    }
-    if (activeSessionId === id) setActiveSessionId(null);
-  };
-
   const handleSendMessage = async (text: string, mediaData?: { data: string; mimeType: string }) => {
     if (!text.trim() && !mediaData) return;
-
     let targetId = activeSessionId;
     let isNew = false;
     if (!targetId) {
@@ -113,185 +77,57 @@ const App: React.FC = () => {
       isNew = true;
     }
 
-    const userMsg: ChatMessage = {
-      id: uuidv4(),
-      role: Role.USER,
-      content: text,
-      timestamp: Date.now(),
-      media: mediaData
-    };
-
-    setSessions(prev => prev.map(s => 
-      s.id === targetId ? { 
-        ...s, 
-        messages: [...s.messages, userMsg], 
-        lastUpdated: Date.now(),
-        title: s.messages.length === 0 ? (text.slice(0, 30) || 'Investigation') : s.title
-      } : s
-    ));
+    const userMsg: ChatMessage = { id: uuidv4(), role: Role.USER, content: text, timestamp: Date.now(), media: mediaData };
+    setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, userMsg], lastUpdated: Date.now(), title: s.messages.length === 0 ? (text.slice(0, 30) || 'Investigation') : s.title } : s));
 
     const placeholderId = uuidv4();
     try {
-      const modelPlaceholder: ExtendedChatMessage = { 
-        id: placeholderId, 
-        role: Role.MODEL, 
-        content: '', 
-        timestamp: Date.now(),
-        status: currentMode === 'Search' ? 'searching' : 'none',
-        isStreaming: true
-      };
-      
+      const modelPlaceholder: ExtendedChatMessage = { id: placeholderId, role: Role.MODEL, content: '', timestamp: Date.now(), status: currentMode === 'Search' ? 'searching' : 'none', isStreaming: true };
       setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, modelPlaceholder] } : s));
-
       const activeSession = sessionsRef.current.find(s => s.id === targetId);
       const history = isNew ? [userMsg] : [...(activeSession?.messages || []), userMsg];
-      
       let fullContent = '';
       let allSources: { uri: string; title: string }[] = [];
       const stream = gemini.streamResponse(history, currentMode);
-      
       for await (const chunk of stream) {
         if (chunk.text) fullContent += chunk.text;
-        if (chunk.sources) {
-          chunk.sources.forEach(src => {
-            if (!allSources.find(s => s.uri === src.uri)) allSources.push(src);
-          });
-        }
-
-        setSessions(prev => prev.map(s => s.id === targetId ? {
-          ...s,
-          messages: s.messages.map(m => {
-            if (m.id === placeholderId) {
-              const extendedM = m as ExtendedChatMessage;
-              return { 
-                ...extendedM, 
-                content: fullContent, 
-                sources: allSources.length > 0 ? [...allSources] : m.sources,
-                status: chunk.status || (fullContent ? 'none' : extendedM.status)
-              };
-            }
-            return m;
-          })
-        } : s));
+        if (chunk.sources) chunk.sources.forEach(src => { if (!allSources.find(s => s.uri === src.uri)) allSources.push(src); });
+        setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: s.messages.map(m => m.id === placeholderId ? { ...m, content: fullContent, sources: allSources.length > 0 ? [...allSources] : m.sources, status: chunk.status || (fullContent ? 'none' : (m as any).status) } : m) } : s));
       }
-
-      setSessions(prev => prev.map(s => s.id === targetId ? {
-        ...s,
-        messages: s.messages.map(m => m.id === placeholderId ? { ...m, status: 'none', isStreaming: false } : m)
-      } : s));
-
-      const finalSession = sessionsRef.current.find(s => s.id === targetId);
-      if (finalSession && hasMemoryAccess) storage.syncSession(finalSession);
-
-    } catch (error: any) {
-      console.error("Ultrawan AI Error:", error);
-      let errorMsg = "The investigator encountered an anomaly. Please retry.";
-      const errStr = JSON.stringify(error);
-      if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED")) {
-        errorMsg = "Ultrawan Quota Exhausted. Global capacity has been reached. Please select your own API key in the header to continue.";
-      }
-      
-      setSessions(prev => prev.map(s => s.id === targetId ? {
-        ...s,
-        messages: s.messages.map(m => m.id === placeholderId ? { 
-          ...m, 
-          content: errorMsg,
-          status: 'none',
-          isStreaming: false
-        } : m)
-      } : s));
-    }
-  };
-
-  const handleImageAction = async (prompt: string, sourceImage?: { data: string; mimeType: string }) => {
-    if (!prompt.trim()) return;
-    let targetId = activeSessionId || createNewSession();
-    const userMsg: ChatMessage = { id: uuidv4(), role: Role.USER, content: prompt, timestamp: Date.now(), media: sourceImage };
-    setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, userMsg], lastUpdated: Date.now() } : s));
-    const placeholderId = uuidv4();
-    const modelPlaceholder: ExtendedChatMessage = { id: placeholderId, role: Role.MODEL, content: '', timestamp: Date.now(), status: 'thinking', isStreaming: true };
-    setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, modelPlaceholder] } : s));
-    try {
-      const result = await gemini.generateImage(prompt, sourceImage);
-      setSessions(prev => prev.map(s => s.id === targetId ? {
-        ...s,
-        messages: s.messages.map(m => m.id === placeholderId ? {
-          ...m,
-          content: result.text || "Visual request processed.",
-          media: { data: result.data, mimeType: result.mimeType },
-          status: 'none',
-          isStreaming: false
-        } : m)
-      } : s));
+      setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: s.messages.map(m => m.id === placeholderId ? { ...m, status: 'none', isStreaming: false } : m) } : s));
       const finalSession = sessionsRef.current.find(s => s.id === targetId);
       if (finalSession && hasMemoryAccess) storage.syncSession(finalSession);
     } catch (error: any) {
-      setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: s.messages.map(m => m.id === placeholderId ? { ...m, content: "Failed to generate image.", status: 'none', isStreaming: false } : m) } : s));
+      setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: s.messages.map(m => m.id === placeholderId ? { ...m, content: "Anomaly encountered.", status: 'none', isStreaming: false } : m) } : s));
     }
   };
 
-  const handleGoogleLogin = (user: User) => {
-    const registry = JSON.parse(localStorage.getItem('ultrawan_user_registry') || '{}');
-    const existingUser = registry[user.email];
-    localStorage.setItem('ultrawan_last_login', user.email);
-    if (existingUser && existingUser.name) {
-      setCurrentUser(existingUser);
-      setShowLogin(false);
-    } else {
-      setCurrentUser(user);
-      setShowLogin(false);
-      setShowNameEntry(true);
-    }
-  };
-
-  const handleSetName = (name: string) => {
-    if (currentUser) {
-      const updatedUser = { ...currentUser, name };
-      setCurrentUser(updatedUser);
-      const registry = JSON.parse(localStorage.getItem('ultrawan_user_registry') || '{}');
-      registry[updatedUser.email] = updatedUser;
-      localStorage.setItem('ultrawan_user_registry', JSON.stringify(registry));
-      setShowNameEntry(false);
-    }
-  };
-
-  const handleDeleteSession = async (id: string) => {
-    setSessions(prev => prev.filter(s => s.id !== id));
-    if (activeSessionId === id) setActiveSessionId(null);
-    if (hasMemoryAccess) await storage.deleteSession(id);
+  const handleGoHome = () => {
+    document.body.classList.remove('app-active');
   };
 
   if (isInitializing) {
-    return (
-      <div className="flex h-screen bg-[#09090b] items-center justify-center p-6">
-         <div className="flex flex-col items-center gap-6">
-            <div className="w-12 h-12 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin"></div>
-            <p className="text-[10px] font-black tracking-[0.4em] text-zinc-500 uppercase animate-pulse">Initializing Ultrawan Core...</p>
-         </div>
-      </div>
-    );
+    return <div className="flex h-screen items-center justify-center bg-[#09090b]">
+      <div className="w-10 h-10 border-2 border-zinc-800 border-t-white rounded-full animate-spin"></div>
+    </div>;
   }
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
   return (
     <div className="flex h-screen bg-[#09090b] text-zinc-100 overflow-hidden relative">
-      {showLogin && <LoginScreen onLogin={handleGoogleLogin} onCancel={() => setShowLogin(false)} />}
-      {showNameEntry && <Onboarding onComplete={handleSetName} email={currentUser?.email} />}
+      {showLogin && <LoginScreen onLogin={(user) => { setCurrentUser(user); setShowLogin(false); setShowNameEntry(true); }} onCancel={() => setShowLogin(false)} />}
+      {showNameEntry && <Onboarding onComplete={(name) => { if (currentUser) { const u = { ...currentUser, name }; setCurrentUser(u); const r = JSON.parse(localStorage.getItem('ultrawan_user_registry') || '{}'); r[u.email] = u; localStorage.setItem('ultrawan_user_registry', JSON.stringify(r)); localStorage.setItem('ultrawan_last_login', u.email); setShowNameEntry(false); } }} email={currentUser?.email} />}
       {showVoiceChat && <VoiceChat onClose={() => setShowVoiceChat(false)} userName={currentUser?.name || 'Guest'} />}
-
-      {isSidebarOpen && window.innerWidth < 1024 && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[40]" onClick={() => setIsSidebarOpen(false)} />
-      )}
 
       <Sidebar 
         sessions={sessions}
         activeSessionId={activeSessionId}
         onSelectSession={(id) => { setActiveSessionId(id); if (window.innerWidth < 1024) setIsSidebarOpen(false); }}
         onNewSession={createNewSession}
-        onDeleteSession={handleDeleteSession}
-        onRenameSession={handleRenameSession}
-        onArchiveSession={handleArchiveSession}
+        onDeleteSession={async (id) => { setSessions(prev => prev.filter(s => s.id !== id)); if (activeSessionId === id) setActiveSessionId(null); if (hasMemoryAccess) await storage.deleteSession(id); }}
+        onRenameSession={(id, title) => setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))}
+        onArchiveSession={(id) => setSessions(prev => prev.map(s => s.id === id ? { ...s, isArchived: !s.isArchived } : s))}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         onExportPDF={() => window.print()}
@@ -307,12 +143,12 @@ const App: React.FC = () => {
           onVoiceClick={() => setShowVoiceChat(true)}
           hasMemoryAccess={hasMemoryAccess}
           onMemoryConnected={() => { setHasMemoryAccess(true); initApp(); }}
+          onGoHome={handleGoHome}
         />
         <div className="flex-1 overflow-hidden relative">
           <ChatInterface 
             messages={activeSession?.messages || []} 
             onSendMessage={handleSendMessage}
-            onImageAction={handleImageAction}
             userName={currentUser?.name || 'Guest'}
             currentMode={currentMode}
             onModeChange={setCurrentMode}

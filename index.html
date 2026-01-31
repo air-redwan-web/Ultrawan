@@ -1,10 +1,10 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Ultrawan - Personal AI Companion</title>
+    <title>Ultrawan - Neural Guardian | Personal AI Companion</title>
     
     <!-- PWA / Web App Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,90 +18,50 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #09090b;
             color: #fafafa;
-            overflow: hidden;
             margin: 0;
             padding: 0;
             -webkit-tap-highlight-color: transparent;
-            user-select: none;
         }
-        .mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .glass {
-            background: rgba(15, 15, 15, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .fluid-transition {
-            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-        }
-        .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .custom-scroll {
-            scrollbar-width: thin;
-            scrollbar-color: #27272a transparent;
-        }
-        .custom-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scroll::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background-color: #27272a;
-            border-radius: 20px;
-        }
-        .katex { font-size: 1.1em !important; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
         
+        /* Custom Animations */
         @keyframes reveal {
-            from { opacity: 0; transform: translateY(10px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        .animate-reveal {
-            animation: reveal 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        .animate-reveal { animation: reveal 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        
+        @keyframes pulse-emerald {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 20px 4px rgba(16, 185, 129, 0.2); }
+        }
+        .emerald-pulse { animation: pulse-emerald 3s infinite; }
+
+        .glass {
+            background: rgba(9, 9, 11, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        @media print {
-            aside, header, form, button, .no-print, .scroll-to-top {
-                display: none !important;
-            }
-            body, #root, main {
-                background: white !important;
-                color: black !important;
-                overflow: visible !important;
-                height: auto !important;
-            }
-            .animate-reveal {
-                animation: none !important;
-                opacity: 1 !important;
-                transform: none !important;
-            }
-            .bg-zinc-900\/40, .bg-[#0d0d0f], .bg-[#0d0d0e], .bg-white\/5 {
-                background: white !important;
-                border: 1px solid #e5e7eb !important;
-                box-shadow: none !important;
-            }
-            .text-zinc-300, .text-zinc-400, .text-zinc-500 {
-                color: #1f2937 !important;
-            }
-            .text-white {
-                color: black !important;
-            }
-        }
+        /* Hide Scrollbar */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        #app-root { display: none; }
+        body.app-active #landing-page { display: none; }
+        body.app-active #app-root { display: block; }
+        body.app-active { overflow: hidden; height: 100vh; }
     </style>
+
 <script type="importmap">
 {
   "imports": {
@@ -115,19 +75,137 @@
   }
 }
 </script>
-<script>
-    window.google = window.google || {};
-    // Register Service Worker for offline functionality
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(err => {
-                console.log('Service Worker registration failed: ', err);
-            });
-        });
-    }
-</script>
 </head>
-<body>
+<body class="selection:bg-white selection:text-black">
+    
+    <!-- WEBSITE LANDING PAGE -->
+    <div id="landing-page" class="relative">
+        <!-- Navigation -->
+        <header class="fixed top-0 w-full z-50 glass h-20 flex items-center justify-between px-6 md:px-12">
+            <div class="flex items-center gap-4">
+                <img src="https://i.postimg.cc/nLLxjNLN/Untitled-design-9.png" class="w-8 h-8" alt="Logo">
+                <span class="text-[11px] font-black tracking-[0.4em] uppercase">Ultrawan</span>
+            </div>
+            <nav class="hidden md:flex items-center gap-12">
+                <a href="#features" class="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Features</a>
+                <a href="#security" class="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Security</a>
+                <a href="#developer" class="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Architect</a>
+            </nav>
+            <button onclick="launchApp()" class="px-6 py-2.5 bg-white text-black text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:bg-zinc-200 transition-all active:scale-95 shadow-xl">
+                Launch Workspace
+            </button>
+        </header>
+
+        <!-- Hero -->
+        <section class="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/5 rounded-full blur-[120px] pointer-events-none"></div>
+            
+            <div class="max-w-4xl text-center z-10 animate-reveal">
+                <h1 class="text-6xl md:text-9xl font-black text-white tracking-tighter uppercase italic leading-none mb-8">
+                    Your Neural <br /> Guardian.
+                </h1>
+                <p class="text-zinc-500 text-lg md:text-xl font-medium max-w-2xl mx-auto leading-relaxed mb-12">
+                    A world-class AI companion designed for deep investigation, high-density knowledge extraction, and absolute privacy.
+                </p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
+                    <button onclick="launchApp()" class="w-full sm:w-auto px-10 py-5 bg-white text-black font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-zinc-200 transition-all shadow-2xl">
+                        Establish Neural Link
+                    </button>
+                    <a href="#features" class="w-full sm:w-auto px-10 py-5 bg-zinc-900 border border-zinc-800 text-zinc-400 font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:text-white transition-all">
+                        System Overview
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section id="features" class="max-w-7xl mx-auto px-6 py-32 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="md:col-span-3 mb-16">
+                <h2 class="text-[10px] font-black text-blue-500 uppercase tracking-[0.5em] mb-4">Core Protocols</h2>
+                <p class="text-4xl font-black text-white uppercase italic tracking-tighter">Institutional Intelligence.</p>
+            </div>
+            
+            <div class="p-10 rounded-[40px] bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all group">
+                <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 group-hover:bg-white group-hover:text-black transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <h3 class="text-xl font-black text-white uppercase tracking-tighter mb-4">Deep Search</h3>
+                <p class="text-zinc-500 text-sm leading-relaxed">Direct access to institutional data, academic records, and verified news via neural grounding.</p>
+            </div>
+
+            <div class="p-10 rounded-[40px] bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all group">
+                <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 group-hover:bg-white group-hover:text-black transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                </div>
+                <h3 class="text-xl font-black text-white uppercase tracking-tighter mb-4">Live Discovery</h3>
+                <p class="text-zinc-500 text-sm leading-relaxed">Real-time human-like voice interaction for hands-free analysis and emotional support.</p>
+            </div>
+
+            <div class="p-10 rounded-[40px] bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all group">
+                <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 group-hover:bg-white group-hover:text-black transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4c.4.4 1 .4 1.4 0l4-4c.4-.4.4-1 0-1.4l-2-2c-.4-.4-1-.4-1.4 0L15 7.6V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2.6l-5 5V18Z"/><circle cx="17" cy="7" r="1"/></svg>
+                </div>
+                <h3 class="text-xl font-black text-white uppercase tracking-tighter mb-4">Memory Vault</h3>
+                <p class="text-zinc-500 text-sm leading-relaxed">Offline-first local storage ensures your investigation history never leaves your hardware.</p>
+            </div>
+        </section>
+
+        <!-- Security -->
+        <section id="security" class="w-full bg-[#0d0d0f] py-40 px-6 flex flex-col items-center">
+            <div class="max-w-4xl text-center">
+                <div class="inline-flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full mb-10 emerald-pulse">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span class="text-[9px] font-black text-emerald-500 uppercase tracking-[0.3em]">End-to-End Neural Sovereignty</span>
+                </div>
+                <h2 class="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase italic mb-10">Private by Architecture.</h2>
+                <p class="text-zinc-500 text-lg font-medium leading-relaxed mb-16 max-w-2xl mx-auto">
+                    Ultrawan leverages the File System Access API and IndexedDB to keep your intelligence locally encrypted. We don't store your data; we build the tools so you can own yours.
+                </p>
+            </div>
+        </section>
+
+        <!-- Architect -->
+        <section id="developer" class="py-40 px-6 flex flex-col items-center">
+            <h2 class="text-[10px] font-black text-zinc-700 uppercase tracking-[0.6em] mb-12">Neural Architect</h2>
+            <div class="flex flex-col items-center text-center">
+                <div class="w-24 h-24 rounded-full border border-zinc-800 flex items-center justify-center bg-white/5 mb-8">
+                    <span class="text-3xl font-black text-white italic">AI</span>
+                </div>
+                <h3 class="text-3xl font-black text-white uppercase italic tracking-tighter mb-2">Asraful Islam Redwan</h3>
+                <p class="text-blue-500 text-[10px] font-black uppercase tracking-[0.4em]">Lead Developer • AIRSOFTS</p>
+                <p class="text-zinc-500 text-sm max-w-md mt-6 font-medium leading-relaxed">
+                    Engineering the future of personal AI companions with a focus on institutional transparency and absolute data privacy.
+                </p>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="py-20 px-6 border-t border-zinc-900 bg-[#09090b]">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+                <div class="flex items-center gap-4">
+                    <img src="https://i.postimg.cc/nLLxjNLN/Untitled-design-9.png" class="w-6 h-6" alt="Logo">
+                    <span class="text-[10px] font-black uppercase tracking-[0.4em]">Ultrawan</span>
+                </div>
+                <p class="text-[9px] font-mono text-zinc-700 uppercase tracking-widest">© 2025 AIRSOFTS. SYSTEM OPERATIONAL.</p>
+                <div class="flex gap-8">
+                    <a href="#" class="text-[9px] font-black text-zinc-500 hover:text-white uppercase tracking-widest transition-colors">Twitter</a>
+                    <a href="#" class="text-[9px] font-black text-zinc-500 hover:text-white uppercase tracking-widest transition-colors">GitHub</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- REACT APP ROOT -->
     <div id="root"></div>
+
+    <script type="module" src="index.tsx"></script>
+    <script>
+        function launchApp() {
+            document.body.classList.add('app-active');
+            window.scrollTo(0, 0);
+            // Trigger custom event for React to handle view switch if needed
+            window.dispatchEvent(new CustomEvent('launch-ultrawan'));
+        }
+    </script>
 </body>
 </html>
