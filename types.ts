@@ -25,6 +25,7 @@ export interface ChatMessage {
   timestamp: number;
   thinking?: string;
   memoryUpdate?: string;
+  isStreaming?: boolean;
   sources?: {
     uri: string;
     title: string;

@@ -13,6 +13,7 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcription, setTranscription] = useState('');
   const [userInputText, setUserInputText] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -56,7 +57,17 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
         inputContextRef.current = inputCtx;
         audioContextRef.current = outputCtx;
 
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (mediaErr: any) {
+          if (mediaErr.name === 'NotFoundError' || mediaErr.name === 'DevicesNotFoundError') {
+            throw new Error("Microphone not detected. Please connect a recording device.");
+          } else if (mediaErr.name === 'NotAllowedError' || mediaErr.name === 'PermissionDeniedError') {
+            throw new Error("Microphone access denied. Please check your browser permissions.");
+          } else {
+            throw mediaErr;
+          }
+        }
         
         const sessionPromise = ai.live.connect({
           model: 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -78,7 +89,6 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
               scriptProcessor.connect(inputCtx.destination);
             },
             onmessage: async (message: LiveServerMessage) => {
-              // Handle Transcriptions
               if (message.serverContent?.outputTranscription) {
                 setTranscription(prev => prev + (message.serverContent?.outputTranscription?.text || ''));
               }
@@ -116,7 +126,10 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
               }
             },
             onclose: () => setIsActive(false),
-            onerror: (e) => console.error("Live Error", e)
+            onerror: (e) => {
+              console.error("Live Error", e);
+              setErrorMessage("The neural audio stream encountered a protocol error.");
+            }
           },
           config: {
             responseModalities: [Modality.AUDIO],
@@ -131,8 +144,9 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
         });
 
         sessionRef.current = await sessionPromise;
-      } catch (e) {
+      } catch (e: any) {
         console.error("Session Init Error", e);
+        setErrorMessage(e.message || "Failed to initialize the Voice Discovery engine.");
         setIsConnecting(false);
       }
     };
@@ -158,14 +172,14 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
       
       {/* Neural Pulse Visualizer */}
       <div className="relative w-64 h-64 md:w-96 md:h-96 flex items-center justify-center">
-         <div className={`absolute inset-0 rounded-full bg-blue-500/10 blur-[60px] transition-all duration-1000 ${isSpeaking ? 'scale-125 opacity-40' : 'scale-100 opacity-20'}`}></div>
-         <div className={`w-32 h-32 md:w-48 md:h-48 rounded-full border border-blue-500/30 flex items-center justify-center transition-all duration-500 ${isSpeaking ? 'scale-110 shadow-[0_0_50px_rgba(59,130,246,0.3)]' : ''}`}>
+         <div className={`absolute inset-0 rounded-full ${errorMessage ? 'bg-red-500/10' : 'bg-blue-500/10'} blur-[60px] transition-all duration-1000 ${isSpeaking ? 'scale-125 opacity-40' : 'scale-100 opacity-20'}`}></div>
+         <div className={`w-32 h-32 md:w-48 md:h-48 rounded-full border ${errorMessage ? 'border-red-500/30' : 'border-blue-500/30'} flex items-center justify-center transition-all duration-500 ${isSpeaking ? 'scale-110 shadow-[0_0_50px_rgba(59,130,246,0.3)]' : ''}`}>
             <div className={`w-16 h-16 md:w-24 md:h-24 rounded-full bg-white/5 flex items-center justify-center overflow-hidden border border-white/10`}>
                <div className={`flex gap-1 items-center h-8`}>
                   {[...Array(5)].map((_, i) => (
                     <div 
                       key={i} 
-                      className="w-1 bg-blue-400 rounded-full transition-all duration-300"
+                      className={`w-1 ${errorMessage ? 'bg-red-400' : 'bg-blue-400'} rounded-full transition-all duration-300`}
                       style={{ 
                         height: isActive ? (isSpeaking ? `${Math.random() * 80 + 20}%` : '20%') : '10%', 
                         opacity: 0.5 + (i * 0.1),
@@ -181,31 +195,48 @@ const VoiceChat: React.FC<VoiceChatProps> = ({ onClose, userName }) => {
       </div>
 
       <div className="mt-8 md:mt-12 text-center z-10 px-6 max-w-2xl">
-        <h2 className="text-[10px] font-black tracking-[0.4em] uppercase text-zinc-600 mb-6">Voice Discovery Engine v4</h2>
+        <h2 className={`text-[10px] font-black tracking-[0.4em] uppercase ${errorMessage ? 'text-red-600' : 'text-zinc-600'} mb-6`}>
+          {errorMessage ? 'Diagnostic Error' : 'Voice Discovery Engine v4'}
+        </h2>
         
         <div className="min-h-[140px] flex flex-col gap-4">
-          {userInputText && (
-             <p className="text-zinc-500 text-sm font-medium animate-reveal bg-zinc-900/40 px-4 py-2 rounded-2xl border border-zinc-800/50">
-               {userInputText}
-             </p>
+          {errorMessage ? (
+            <div className="animate-reveal">
+              <p className="text-xl md:text-2xl font-black text-white italic tracking-tighter leading-relaxed mb-4">
+                Session Initialization Failed
+              </p>
+              <p className="text-zinc-500 text-sm font-medium bg-red-500/5 px-6 py-4 rounded-2xl border border-red-500/20 max-w-sm mx-auto">
+                {errorMessage}
+              </p>
+            </div>
+          ) : (
+            <>
+              {userInputText && (
+                 <p className="text-zinc-500 text-sm font-medium animate-reveal bg-zinc-900/40 px-4 py-2 rounded-2xl border border-zinc-800/50">
+                   {userInputText}
+                 </p>
+              )}
+              
+              <p className="text-xl md:text-2xl font-black text-white italic tracking-tighter leading-relaxed">
+                {isConnecting ? 'Initializing Link...' : (transcription || (isSpeaking ? 'Ultrawan Speaking' : 'Listening...'))}
+              </p>
+            </>
           )}
-          
-          <p className="text-xl md:text-2xl font-black text-white italic tracking-tighter leading-relaxed">
-            {isConnecting ? 'Initializing Link...' : (transcription || (isSpeaking ? 'Ultrawan Speaking' : 'Listening...'))}
-          </p>
         </div>
         
-        <div className="mt-10 flex items-center justify-center gap-3">
-           <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-           <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">Global Language Engine Active</p>
-        </div>
+        {!errorMessage && (
+          <div className="mt-10 flex items-center justify-center gap-3">
+             <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
+             <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">Global Language Engine Active</p>
+          </div>
+        )}
       </div>
 
       <button 
         onClick={onClose}
-        className="absolute bottom-12 px-10 py-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-full border border-red-500/30 font-black text-[10px] tracking-[0.3em] uppercase transition-all active:scale-95 shadow-2xl"
+        className="absolute bottom-12 px-10 py-4 bg-zinc-900/40 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-full border border-zinc-800 font-black text-[10px] tracking-[0.3em] uppercase transition-all active:scale-95 shadow-2xl"
       >
-        Close Connection
+        {errorMessage ? 'Close Diagnostics' : 'Close Connection'}
       </button>
 
       <style>{`

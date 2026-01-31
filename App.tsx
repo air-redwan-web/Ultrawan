@@ -20,7 +20,6 @@ const App: React.FC = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showNameEntry, setShowNameEntry] = useState(false);
   const [showVoiceChat, setShowVoiceChat] = useState(false);
-  const [hasDismissedLanding, setHasDismissedLanding] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   
   const [hasMemoryAccess, setHasMemoryAccess] = useState(false);
@@ -34,17 +33,30 @@ const App: React.FC = () => {
     sessionsRef.current = sessions;
   }, [sessions]);
 
+  // Handle responsiveness on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const initApp = useCallback(async () => {
     setIsInitializing(true);
+    
+    // 1. Check Login Status
     const lastEmail = localStorage.getItem('ultrawan_last_login');
     if (lastEmail) {
       const registry = JSON.parse(localStorage.getItem('ultrawan_user_registry') || '{}');
       if (registry[lastEmail]) {
         setCurrentUser(registry[lastEmail]);
-        setHasDismissedLanding(true);
       }
     }
     
+    // 2. Check Memory Access
     const permitted = await storage.verifyPermission();
     if (permitted) {
       setHasMemoryAccess(true);
@@ -55,6 +67,7 @@ const App: React.FC = () => {
         if (firstNonArchived) setActiveSessionId(firstNonArchived.id);
       }
     }
+    
     setIsInitializing(false);
   }, [activeSessionId]);
 
@@ -62,10 +75,11 @@ const App: React.FC = () => {
 
   const createNewSession = useCallback(() => {
     const newId = uuidv4();
-    const s: ChatSession = { id: newId, title: 'New discussion', messages: [], lastUpdated: Date.now() };
+    const s: ChatSession = { id: newId, title: 'New Investigation', messages: [], lastUpdated: Date.now() };
     setSessions(prev => [s, ...prev]);
     setActiveSessionId(newId);
     if (hasMemoryAccess) storage.syncSession(s);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
     return newId;
   }, [hasMemoryAccess]);
 
@@ -86,74 +100,6 @@ const App: React.FC = () => {
     if (activeSessionId === id) setActiveSessionId(null);
   };
 
-  const handleImageAction = async (prompt: string, sourceImage?: { data: string; mimeType: string }) => {
-    if (!prompt.trim()) return;
-
-    let targetId = activeSessionId || createNewSession();
-
-    const userMsg: ChatMessage = {
-      id: uuidv4(),
-      role: Role.USER,
-      content: prompt,
-      timestamp: Date.now(),
-      media: sourceImage
-    };
-
-    setSessions(prev => prev.map(s => 
-      s.id === targetId ? { 
-        ...s, 
-        messages: [...s.messages, userMsg], 
-        lastUpdated: Date.now(),
-        title: s.messages.length === 0 ? `Image: ${prompt.slice(0, 20)}` : s.title
-      } : s
-    ));
-
-    const placeholderId = uuidv4();
-    const modelPlaceholder: ExtendedChatMessage = { 
-      id: placeholderId, 
-      role: Role.MODEL, 
-      content: '', 
-      timestamp: Date.now(),
-      status: 'thinking'
-    };
-    
-    setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, modelPlaceholder] } : s));
-
-    try {
-      const result = await gemini.generateImage(prompt, sourceImage);
-      
-      setSessions(prev => prev.map(s => s.id === targetId ? {
-        ...s,
-        messages: s.messages.map(m => m.id === placeholderId ? {
-          ...m,
-          content: result.text || "Processed visual request successfully.",
-          media: { data: result.data, mimeType: result.mimeType },
-          status: 'none'
-        } : m)
-      } : s));
-
-      const finalSession = sessionsRef.current.find(s => s.id === targetId);
-      if (finalSession && hasMemoryAccess) storage.syncSession(finalSession);
-
-    } catch (error: any) {
-      console.error("Image Action Error:", error);
-      let errorMsg = "Failed to process image request.";
-      const errStr = JSON.stringify(error);
-      if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED")) {
-        errorMsg = "Ultrawan Quota Exhausted. Global capacity has been reached. To continue immediately, click the 'Update Key' icon in the top header and select your own project key.";
-      }
-
-      setSessions(prev => prev.map(s => s.id === targetId ? {
-        ...s,
-        messages: s.messages.map(m => m.id === placeholderId ? {
-          ...m,
-          content: errorMsg,
-          status: 'none'
-        } : m)
-      } : s));
-    }
-  };
-
   const handleSendMessage = async (text: string, mediaData?: { data: string; mimeType: string }) => {
     if (!text.trim() && !mediaData) return;
 
@@ -161,7 +107,7 @@ const App: React.FC = () => {
     let isNew = false;
     if (!targetId) {
       targetId = uuidv4();
-      const newS: ChatSession = { id: targetId, title: text.slice(0, 30) || 'New Investigation', messages: [], lastUpdated: Date.now() };
+      const newS: ChatSession = { id: targetId, title: text.slice(0, 30) || 'Investigation', messages: [], lastUpdated: Date.now() };
       setSessions(prev => [newS, ...prev]);
       setActiveSessionId(targetId);
       isNew = true;
@@ -180,7 +126,7 @@ const App: React.FC = () => {
         ...s, 
         messages: [...s.messages, userMsg], 
         lastUpdated: Date.now(),
-        title: s.messages.length === 0 ? (text.slice(0, 30) || 'New Investigation') : s.title
+        title: s.messages.length === 0 ? (text.slice(0, 30) || 'Investigation') : s.title
       } : s
     ));
 
@@ -191,7 +137,8 @@ const App: React.FC = () => {
         role: Role.MODEL, 
         content: '', 
         timestamp: Date.now(),
-        status: currentMode === 'Search' ? 'searching' : 'none'
+        status: currentMode === 'Search' ? 'searching' : 'none',
+        isStreaming: true
       };
       
       setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, modelPlaceholder] } : s));
@@ -230,7 +177,7 @@ const App: React.FC = () => {
 
       setSessions(prev => prev.map(s => s.id === targetId ? {
         ...s,
-        messages: s.messages.map(m => m.id === placeholderId ? { ...m, status: 'none' } : m)
+        messages: s.messages.map(m => m.id === placeholderId ? { ...m, status: 'none', isStreaming: false } : m)
       } : s));
 
       const finalSession = sessionsRef.current.find(s => s.id === targetId);
@@ -241,7 +188,7 @@ const App: React.FC = () => {
       let errorMsg = "The investigator encountered an anomaly. Please retry.";
       const errStr = JSON.stringify(error);
       if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED")) {
-        errorMsg = "Ultrawan Quota Exhausted. The current project has reached its capacity. To continue immediately, click the 'Update Key' icon in the top header and select your own paid project key.";
+        errorMsg = "Ultrawan Quota Exhausted. Global capacity has been reached. Please select your own API key in the header to continue.";
       }
       
       setSessions(prev => prev.map(s => s.id === targetId ? {
@@ -249,9 +196,37 @@ const App: React.FC = () => {
         messages: s.messages.map(m => m.id === placeholderId ? { 
           ...m, 
           content: errorMsg,
-          status: 'none' 
+          status: 'none',
+          isStreaming: false
         } : m)
       } : s));
+    }
+  };
+
+  const handleImageAction = async (prompt: string, sourceImage?: { data: string; mimeType: string }) => {
+    if (!prompt.trim()) return;
+    let targetId = activeSessionId || createNewSession();
+    const userMsg: ChatMessage = { id: uuidv4(), role: Role.USER, content: prompt, timestamp: Date.now(), media: sourceImage };
+    setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, userMsg], lastUpdated: Date.now() } : s));
+    const placeholderId = uuidv4();
+    const modelPlaceholder: ExtendedChatMessage = { id: placeholderId, role: Role.MODEL, content: '', timestamp: Date.now(), status: 'thinking', isStreaming: true };
+    setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: [...s.messages, modelPlaceholder] } : s));
+    try {
+      const result = await gemini.generateImage(prompt, sourceImage);
+      setSessions(prev => prev.map(s => s.id === targetId ? {
+        ...s,
+        messages: s.messages.map(m => m.id === placeholderId ? {
+          ...m,
+          content: result.text || "Visual request processed.",
+          media: { data: result.data, mimeType: result.mimeType },
+          status: 'none',
+          isStreaming: false
+        } : m)
+      } : s));
+      const finalSession = sessionsRef.current.find(s => s.id === targetId);
+      if (finalSession && hasMemoryAccess) storage.syncSession(finalSession);
+    } catch (error: any) {
+      setSessions(prev => prev.map(s => s.id === targetId ? { ...s, messages: s.messages.map(m => m.id === placeholderId ? { ...m, content: "Failed to generate image.", status: 'none', isStreaming: false } : m) } : s));
     }
   };
 
@@ -262,7 +237,6 @@ const App: React.FC = () => {
     if (existingUser && existingUser.name) {
       setCurrentUser(existingUser);
       setShowLogin(false);
-      setHasDismissedLanding(true);
     } else {
       setCurrentUser(user);
       setShowLogin(false);
@@ -278,7 +252,6 @@ const App: React.FC = () => {
       registry[updatedUser.email] = updatedUser;
       localStorage.setItem('ultrawan_user_registry', JSON.stringify(registry));
       setShowNameEntry(false);
-      setHasDismissedLanding(true);
     }
   };
 
@@ -288,47 +261,21 @@ const App: React.FC = () => {
     if (hasMemoryAccess) await storage.deleteSession(id);
   };
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-
   if (isInitializing) {
     return (
-      <div className="flex h-screen bg-[#09090b] items-center justify-center">
+      <div className="flex h-screen bg-[#09090b] items-center justify-center p-6">
          <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin"></div>
+            <div className="w-12 h-12 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin"></div>
             <p className="text-[10px] font-black tracking-[0.4em] text-zinc-500 uppercase animate-pulse">Initializing Ultrawan Core...</p>
          </div>
       </div>
     );
   }
 
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+
   return (
     <div className="flex h-screen bg-[#09090b] text-zinc-100 overflow-hidden relative">
-      {(!hasDismissedLanding && !currentUser && !showLogin) && (
-        <div className="fixed inset-0 z-[200] bg-[#09090b] flex flex-col items-center justify-center p-6 text-center">
-           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
-           <img src="https://i.postimg.cc/nLLxjNLN/Untitled-design-9.png" className="w-24 h-24 mb-8 animate-reveal" alt="Logo" />
-           <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-white mb-4 animate-reveal italic">ULTRAWAN</h1>
-           <p className="text-zinc-500 text-sm md:text-base max-w-lg mb-12 animate-reveal delay-100 leading-relaxed">
-             A personal, privacy-focused AI life companion designed to be a loyal assistant, teacher, and emotional supporter.
-           </p>
-           <div className="flex flex-col gap-4 animate-reveal delay-200">
-             <button 
-               onClick={() => setHasDismissedLanding(true)}
-               className="px-10 py-4 bg-white text-black rounded-full font-black text-xs tracking-[0.2em] uppercase hover:bg-zinc-200 transition-all active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
-             >
-               Enter the Core
-             </button>
-             <button 
-               onClick={() => setShowLogin(true)}
-               className="text-[10px] font-black text-zinc-600 uppercase tracking-widest hover:text-white transition-colors"
-             >
-               Login to Sync
-             </button>
-           </div>
-           <p className="mt-12 text-[10px] text-zinc-800 font-bold tracking-[0.3em] uppercase opacity-40">Powered by AIRSOFTS Intelligence</p>
-        </div>
-      )}
-
       {showLogin && <LoginScreen onLogin={handleGoogleLogin} onCancel={() => setShowLogin(false)} />}
       {showNameEntry && <Onboarding onComplete={handleSetName} email={currentUser?.email} />}
       {showVoiceChat && <VoiceChat onClose={() => setShowVoiceChat(false)} userName={currentUser?.name || 'Guest'} />}
@@ -337,46 +284,42 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[40]" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {(currentUser || hasDismissedLanding) && (
-        <>
-          <Sidebar 
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={(id) => { setActiveSessionId(id); if (window.innerWidth < 1024) setIsSidebarOpen(false); }}
-            onNewSession={createNewSession}
-            onDeleteSession={handleDeleteSession}
-            onRenameSession={handleRenameSession}
-            onArchiveSession={handleArchiveSession}
-            isOpen={isSidebarOpen}
-            onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-            onExportPDF={() => window.print()}
-          />
+      <Sidebar 
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={(id) => { setActiveSessionId(id); if (window.innerWidth < 1024) setIsSidebarOpen(false); }}
+        onNewSession={createNewSession}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
+        onArchiveSession={handleArchiveSession}
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        onExportPDF={() => window.print()}
+      />
 
-          <main className="flex-1 flex flex-col relative min-w-0">
-            <Header 
-              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
-              isSidebarOpen={isSidebarOpen}
-              activeTitle={activeSession?.title || 'New Investigation'}
-              userName={currentUser?.name || null}
-              onLoginClick={() => setShowLogin(true)}
-              onVoiceClick={() => setShowVoiceChat(true)}
-              hasMemoryAccess={hasMemoryAccess}
-              onMemoryConnected={() => { setHasMemoryAccess(true); initApp(); }}
-            />
-            <div className="flex-1 overflow-hidden relative">
-              <ChatInterface 
-                messages={activeSession?.messages || []} 
-                onSendMessage={handleSendMessage}
-                onImageAction={handleImageAction}
-                userName={currentUser?.name || 'Guest'}
-                currentMode={currentMode}
-                onModeChange={setCurrentMode}
-                onVoiceClick={() => setShowVoiceChat(true)}
-              />
-            </div>
-          </main>
-        </>
-      )}
+      <main className="flex-1 flex flex-col relative min-w-0">
+        <Header 
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
+          isSidebarOpen={isSidebarOpen}
+          activeTitle={activeSession?.title || 'New Investigation'}
+          userName={currentUser?.name || null}
+          onLoginClick={() => setShowLogin(true)}
+          onVoiceClick={() => setShowVoiceChat(true)}
+          hasMemoryAccess={hasMemoryAccess}
+          onMemoryConnected={() => { setHasMemoryAccess(true); initApp(); }}
+        />
+        <div className="flex-1 overflow-hidden relative">
+          <ChatInterface 
+            messages={activeSession?.messages || []} 
+            onSendMessage={handleSendMessage}
+            onImageAction={handleImageAction}
+            userName={currentUser?.name || 'Guest'}
+            currentMode={currentMode}
+            onModeChange={setCurrentMode}
+            onVoiceClick={() => setShowVoiceChat(true)}
+          />
+        </div>
+      </main>
     </div>
   );
 };
